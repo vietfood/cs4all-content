@@ -1,0 +1,544 @@
+---
+title: "Finite Markov Decision Processes (Sutton and Barto)"
+description: "RL Sutton and Barto - Chapter 3"
+date: 2025-12-06
+---
+
+import Callout from "@/components/blog/Callout.astro"
+import MdxCite from "@/components/blog/MdxCite.astro"
+import MdxBib from "@/components/blog/MdxBib.astro"
+import MdxImage from "@/components/blog/MdxImage.astro"
+
+import mdpIm from "./mdp.png"
+import backupIm from "./backup.png"
+import backupIm2 from "./backup2.png"
+
+## 1. Tương tác giữa Agent-Environment
+
+<Callout variant="important">
+Trước khi đi vào phần chính, chúng ta cần một mô hình tư duy. Reinforcement Learning không phải là làm việc với một tập dữ liệu như Machine Learning hay Deep Learning, mà là học bằng cách tương tác hay nói cách khác là một vòng lặp tương tác liên tục.
+</Callout>
+
+Hai thành phần chính của Reinforcement Learning (RL) đó chính là **Agent** (tác nhân, mình sẽ giữ nguyên chữ Agent) và **Environment** (môi trường). Trong đó, environment là *thế giới* mà agent ở và tương tác cùng. Tại mỗi bước (hay là một bước thời gian), agent thấy mình ở một **state** (trạng thái) của environment và từ đó đưa ra quyết định nó cần làm gì dựa trên state ấy.
+
+<Callout variant="tip">
+Dựa theo <MdxCite bibKey="SpinningUp2018"/>, có 2 định nghĩa ta cần để ý là **state** và **observation**. Định nghĩa một cách formal hơn thì **state** $s$ là một miêu tả *đầy đủ* thông tin về môi trường. Ví dụ như khi đánh cờ vua, một state $s$ sẽ cho ta biết rõ quân cờ nằm đâu trên bàn cờ, các quân còn lại nằm ở đâu, kể cả vị trí của quân đối phương.
+
+Nhưng ở *đánh bài poker* thì agent chỉ biết các quân bài đang cầm trên tay mình mà không rõ về quân bài trên tay người khác hoặc nằm dưới bộ bài. Ta gọi một miêu tả *không đầy đủ* thông tin về môi trường là một **observation** $o$.
+
+Tuy nhiên, ta luôn giả định rằng các miêu tả luôn là đầy đủ nên do đó $o = s$ (observation cũng chính là state).
+</Callout>
+
+<Callout variant="note" title="Ranh giới giữa Agent và Environment">
+Một điểm cực kỳ hay mà Sutton & Barto nhắc đến: Ranh giới này không phải là ranh giới vật lý (như da của robot). Bất cứ thứ gì mà Agent không thể thay đổi tùy ý thì được xem là thuộc về Environment.
+
+Ví dụ: Pin của robot, động cơ của tay máy... Agent không thể tự ý ra lệnh "Pin hãy đầy lại đi", nên Pin là một phần của Environment (cụ thể là State).
+</Callout>
+
+Bằng cách thực hiện hành động lên môi trường, agent cũng nhận được một **reward signal** (tín hiệu phần thưởng hay gọi tắt là phần thưởng - reward), reward là một số thực thể hiện rằng state hiện tại của environment **tốt** hay **xấu**. Mục đích của agent là **tối đa hoá** reward mà nó tích luỹ được (thông qua nhiều bước), ta gọi reward tích luỹ ấy là **Return** (lợi tức).
+
+<MdxImage
+src={mdpIm}
+alt="MDP Image"
+caption=""
+/>
+
+<Callout variant="definition" title="MDP là gì ?">
+MDP-Markov Decision Process (quá trình quyết định Markov) là một nền tảng toán học được dùng để formal hoá bài toán **sequential decision making** (đưa ra quyết định tuần tự). Ở bài toán này, tại mỗi bước thời gian, agent phải đưa ra quyết định (action) dựa trên state, trong đó action của agent không chỉ ảnh hưởng lên các reward, state ngay sau đó mà còn các reward, state, ở tương lai xa.
+
+MDP xem rằng *bất kể chi tiết* nào của agent như torques, vận tôóc, ..., và bất kể mục tiêu mà agent *đang cố gắng đạt được* là gì, hay bất kỳ bài toán nào có mục tiêu thì *đều có thể được rút gọn thành ba tín hiệu* truyền qua lại giữa agent và environment của nó:
+- Một tín hiệu đại diện cho *lựa chọn được thực hiện bởi agent* (action).
+- Một tín hiệu đại diện cho *cơ sở mà lựa chọn được thực hiện* (state).
+- Một tín hiệu để xác định *mục tiêu của agent* (reward).
+</Callout>
+
+Ta có thể formal hoá quá trình này như sau:
+- Tại mỗi bước thời gian $t$, agent thấy được miêu tả và thông tin của environment là state $S_t \in \mathcal{S}$, trong đó $\mathcal{S}$ là tập hợp tất cả các state mà environment có thể có.
+- Dựa vào $S_t$, agent chọn một **Action** (hành động) $A_t \in \mathcal{A}(S_t)$ (có thể thấy tại mỗi state $S_t$ sẽ có một tập hợp các action khác nhau).
+- Ngay bước sau đó (bước thời gian $t+1$), agent nhận được một reward $R_{t+1} \in \mathcal{R} \subset \mathbb{R}$ và thấy mình đang ở một state mới của environment là $S_{t+1} \in \mathcal{S}$.
+
+Chuỗi tương tác này tạo thành một **Trajectory**:
+$$
+S_{0}, A_{0}, R_{1}, S_{1}, A_{1}, R_{2}, S_{2}, A_{2}, \dots
+$$
+
+<Callout variant="note">
+Có thể thấy, ta cần **initial state** (trạng thái bắt đầu) là $S_0$ và **initial action** là $A_0$ để thực hiện quá trình học cho agent. Việc chọn được $S_0$ và $A_0$ cực kì quan trọng (đọc rõ hơn [tại đây](https://ai.stackexchange.com/questions/15372/how-important-is-the-choice-of-the-initial-state)).
+</Callout>
+
+<Callout variant="definition" title="Dynamics của MDP">
+Trong một **finite MDP** (MDP hữu hạn), các tập hợp $\mathcal{S}, \mathcal{A}, \mathcal{R}$ đều hữu hạn. Do đó, các biến ngẫu nhiên $S_t$ và $R_t$ có một phân phối xác suất rời rạc xác định, chỉ phụ thuộc vào state và action ngay trước đó ($S_{t-1}, A_{t-1}$). Ta gọi đây là **Dynamics** của MDP:
+
+$$
+p(s', r \mid s, a) = \text{Pr} \{ S_{t} = s', R_{t} =r \mid S_{t-1} = s, A_{t-1} = a \}
+$$
+
+Vì $p$ là một phân phối xác suất, tổng xác suất của tất cả các cặp $(s', r)$ có thể xảy ra phải bằng 1:
+$$
+\sum_{s' \in \mathcal{S}} \sum_{r \in \mathcal{R}} p(s', r \mid s, a) = 1, \quad \forall s \in \mathcal{S}, a \in \mathcal{A}(s)
+$$
+</Callout>
+
+Trong một MDP hữu hạn, thế giới của agent (hay environment) tuân theo các quy luật. Những quy luật này mang tính xác suất và quy luật đó chính là dynamics của environment.
+
+Điểm mấu chốt tiếp theo của MDP chính là **Markov Property**: Xác suất của $S_t$ và $R_t$ chỉ phụ thuộc vào $S_{t-1}$ và $A_{t-1}$, không phụ thuộc vào lịch sử xa hơn. State hiện tại đã gói gọn tất cả thông tin cần thiết để đưa ra quyết định cho tương lai.
+
+Từ dynamics $p$, ta có thể tính được các thông tin quan trọng khác như:
+- **State-transition probability** (xác suất chuyển trạng thái):
+$$
+p(s' \mid s, a) = \sum_{r \in \mathcal{R}} p(s', r \mid s, a)
+$$
+- **Expected reward** (phần thưởng kì vọng): có thể hiểu như reward mà ta kì vọng có được khi thực hiện action $a$ tại state $s$.
+$$
+\begin{aligned}
+r(s, a) &= \mathbb{E}[R_{t} \mid S_{t-1} = s, A_{t-1} = a]  \\
+&= \sum_{r \in \mathcal{R}} r p(r \mid s, a)  \\
+&= \sum_{r \in \mathcal{R}} r \left[ \sum_{s' \in \mathcal{S}} p(s', r \mid s, a) \right]
+\end{aligned}
+$$
+
+## 2. Goals, Rewards và Returns
+
+<Callout variant="definition" title="The Reward Hypothesis">
+Mọi mục tiêu (goal) đều có thể được mô hình hóa thành việc tối đa hóa giá trị kì vọng của tổng tích lũy một tín hiệu vô hướng nào đó (ở đây chính là reward).
+</Callout>
+
+Dựa trên reward hypothesis, để đạt được một mục tiêu nào đó ta cần mô hình hoá mục tiêu và bài toán thành reward, từ đó agent chỉ cần học dựa trên reward. Ngoài ra, điều quan trọng là reward là một cách để ta nói với agent mục tiêu cần đạt được **là gì** (what) chứ không phải **cách** đạt được mục tiêu (how).
+
+Thế nhưng mục tiêu thật sự của Agent là gì ? Không phải là đạt reward cao nhất **ngay lập tức**, mà là tối đa hóa tổng reward tích lũy trong **dài hạn**. Ta gọi tổng tích luỹ này là **Return** ($G_t$).
+
+<Callout variant="note">
+Nói kĩ hơn, $G_t$ chính là tổng reward mà agent tích luỹ được ở *tương lai* (tức là từ bước thời gian $t+1$ cho đến khi kết thúc). Nhưng tại sao tổng tương lai thay vì tổng reward quá khứ hay gì đó khác? Nhắc lại mục đích của agent chính là tối đa hoá reward mà nó tích luỹ được, giống như việc liên tục nhìn về tương lai và chọn *tương lai* nào mà nó có thể có nhiều reward nhất.
+</Callout>
+
+Tùy vào loại bài toán mà ta sẽ có cách tính $G_t$ sẽ khác nhau:
+
+1.  **Episodic Tasks**: Tương tác giữa agent và environment diễn ra theo các khoảng nhất định, gọi là **episode**, mỗi episode kết thúc ở **terminal state** (trạng thái kết thúc) tại thời điểm $T$ (gọi là *terminal timestep*).
+$$
+G_t = R_{t+1} + R_{t+2} + \dots + R_T
+$$
+
+2.  **Continuing Tasks**: Tương tác giữa agent và environment diễn ra mãi mãi ($T = \infty$). Để tránh việc $G_t \to \infty$, ta dùng khái niệm **Discounting** với tham số $0 \leq \gamma < 1$.
+$$
+G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ... = \sum_{k=0}^\infty \gamma^k R_{t+k+1}
+$$
+
+<Callout variant="note" title="Tại sao lại cần Discount">
+Có 2 lý do đơn giản như sau:
+- **Tính không chắc chắn**: Ta không thể chắc chắn được về tương lai do đó các reward ở tương lai phía sau sẽ không thể chắc chắn rằng *tốt* hay *tệ* hơn reward hiện tại.
+- **Tính kiên nhẫn**: Ví dụ như trong tài chính, tiền hiện tại ta có được (reward hiện tại) sẽ quan trọng hơn tiền lãi nhận được về sau (reward tương lai). Do đó có thể xem $\gamma$ như tính kiên nhẫn của agent (đợi các reward ở tương lai để mong muốn có tổng reward tốt nhất). Nếu $\gamma = 0$, ta có thể nói agent *tham lam* (greedy) khi chỉ quan tâm đến reward hiện tại.
+
+Ngoài ra về mặt toán học, $|\gamma| < 1$ sẽ giúp tổng vô hạn $G_t$ (ở trường hợp continuing) hội tụ được, nếu $\gamma = 1$ thì tổng $G_t$ không hội tụ.
+</Callout>
+
+Có thể thấy:
+$$
+\begin{aligned}
+G_t &= R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ... \\
+&= R_{t+1} + \gamma (R_{t+2} + \gamma R_{t+3} + ...) \\
+&= R_{t+1} + \gamma G_{t+1}
+\end{aligned}
+$$
+
+Công thức phía trên là công thức đệ quy *cực quan trọng* mà ta cần nhớ. Công thức này nghĩa là: Return của chuỗi reward hiện tại bằng reward ngay lập tức cộng với giá trị của chuỗi reward tiếp theo (đã được discount).
+
+Để định nghĩa 1 công thức return duy nhất cho cả 2 trường hợp, ta định nghĩa như sau:
+$$
+G_{t} = \sum_{k=0}^{T - t - 1} \gamma^{k} R_{t+k+1}
+$$
+Ở trường hợp continuing thì $T = \infty$ và $0 \leq \gamma < 1$. Còn ở trường hợp episodic thì $\gamma = 1$ và $T$ hữu hạn.
+
+## 3. Policies và Value Functions
+
+Làm sao agent biết một state là "tốt"? Một state chỉ tốt nếu nó dẫn đến return cao. Nhưng return lại phụ thuộc vào cách agent hành xử trong tương lai do đó agent cần phải biết cách chọn và đánh giá được action của mình.
+
+Ta có **Value Functions** để ước lượng *độ tốt* của một state (hoặc một cặp state-action). Và *độ tốt* của một state $s$ (hoặc cặp state-action $s, a$) chính là return mà nó có thể đạt được (hay nói cách chính là kì vọng return). Trong khi đó, **Policy** chính là bộ não của agent, nó sẽ giúp agent đưa ra các action dựa trên state hiện tại của environment.
+
+<Callout variant="definition" title="Policy">
+**Policy** $\pi$ là một ánh xạ từ state sang phân phối xác suất của các action. Nếu một agent chọn policy $\pi(a \mid s)$ tại bước thời gian $t$ thì $\pi(a|s)$ là xác suất agent chọn $A_t=a$ khi đang ở state $S_t=s$. Ngoài ra do $\pi(a \mid s)$ là một phân phối của action $a$ nên do đó $\sum_{a \in \mathcal{A}(s)} \pi(a \mid s) = 1$ với $\pi(a \mid s) \geq 0, \forall a \in \mathcal{A}(s)$.
+</Callout>
+
+Ta có hai loại Value Function chính là:
+
+1.  **State-value function** $v_{\pi}(s)$: kì vọng của return khi bắt đầu ở $s$ và đi theo policy $\pi$.
+$$
+v_{\pi}(s) = \mathbb{E}_{\pi}[G_{t} \mid S_{t} = s] = \mathbb{E}_{\pi}\left[ \sum_{k=0}^{\infty} \gamma^{k} R_{k+1} \mid S_{t} = s \right]
+$$
+
+2.  **Action-value function** $q_{\pi}(s, a)$: kì vọng của return khi bắt đầu ở $s$, thực hiện action $a$, và *sau đó* đi theo policy $\pi$.
+$$
+q_{\pi}(s, a) = \mathbb{E}_{\pi}[G_{t} \mid S_{t} = s, A_{t} = a] = \mathbb{E}_{\pi} \left[ \sum_{k=0}^{\infty} \gamma^{k} R_{k+1} \mid S_t = s, A_t = a \right]
+$$
+
+Chữ **Q** trong thuật toán nổi tiếng **Q-Learning** (và sau này là Deep Q-Networks - DQN) chính là action-value function $q(s, a)$.
+
+<Callout variant="note">
+Một câu quan trọng đó là **đi theo** policy $\pi$. Nói cách khác, tại mỗi state $s$, ta có thể chọn nhiều policy $\pi$ khác nhau để đưa ra action $a$. Do đó Value Function chỉ xấp xỉ (hay đưa ra kì vọng của return) cho một policy $\pi$ nào đó và các state tương lai phía sau (cho đến khi kết thúc) bắt buộc cũng phải dùng policy $\pi$ ấy.
+</Callout>
+
+## 4. Phương trình Bellman
+
+Vì $G_t$ có tính đệ quy, do đó Value Function cũng phải có tính đệ quy. Mối quan hệ này cho phép chúng ta tính toán các Value Function bằng cách "truy ngược" (backtrack) thông tin từ state kế tiếp về state hiện tại. Ta có thể viết $v_{\pi}$ về dưới dạng đệ quy như sau:
+$$
+\begin{aligned}
+v_{\pi}(s) &= \mathbb{E}[G_{t} \mid S_{t} = s] \\
+&= \mathbb{E}[R_{t+1} + \gamma G_{t+1} \mid S_{t} = s] \\
+&= \mathbb{E}[R_{t+1} \mid S_{t} = s] + \gamma\mathbb{E}[G_{t+1} \mid S_{t} = s] \\
+&= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) [r + \gamma v_{\pi}(s')] \\
+&= \mathbb{E}[R_{t+1} + \gamma v_{\pi}(S_{t+1}) \mid S_t = s]
+\end{aligned}
+$$
+
+Phương trình phía trên được gọi là **phương trình Bellman** của state-value function (xem thêm cách chứng minh ở [phụ lục A](/note/sutton-barto-3#a-chứng-minh-phương-trình-bellman-của-value-state-function)).
+- Phương trình Bellman chỉ ra rằng giá trị state-value hiện tại phải bằng reward ở bước kế tiếp cộng với state-value ở bước kế tiếp, đây chính là **Self-Consistency Condition**.
+- Phương trình Bellman còn cho thấy value của state này là *trung bình có trọng số* của các reward mà agent mong đợi nhận được ngay lập tức, cộng với value đã discount của các state mà agent sẽ đặt chân đến tiếp theo.
+
+Tương tự ta cũng có phương trình Bellman cho action-value function $q_{\pi}(s, a)$:
+$$
+\begin{aligned}
+q_{\pi}(s, a) &= \mathbb{E}[G_{t} \mid S_{t} = s, A_{t} = a] \\
+&= \sum_{s', r}p(s', r \mid s, a)\left[ r +  \gamma  \sum_{a' \in \mathcal{A}(s')} \pi(a' \mid s')q_{\pi}(s', a') \right]
+\end{aligned}
+$$
+
+Cách chứng minh ở [phụ lục B](/note/sutton-barto-3#b-chứng-minh-phương-trình-bellman-của-action-value-function).
+
+<Callout variant="note">
+Nhưng tại sao ta lại cần $q(s, a)$ khi đã có $v(s)$?
+
+Nếu ta chỉ biết một state "tốt" đến mức nào ($v(s)$), ta vẫn cần biết dynamics của environment để tính toán xem action nào dẫn đến state tốt đó (dựa trên phương trình Bellman của $v(s)$). Nhưng nếu ta biết $q(s, a)$, bạn có thể chọn ngay action có $q$ tốt nhất mà **không cần biết gì về dynamics** của environment. Đấy chính là motivation của phần kế tiếp, *Bellman optimality function* (phương trình Bellman tối ưu). Đây là ý tưởng chính của **Model-Free Reinforcement Learning**.
+</Callout>
+
+<MdxImage
+src={backupIm}
+alt="Backup Diagram"
+caption="Backup Diagram có thể được xem như một cách visualize phương trình Bellman. Nguồn: https://towardsdatascience.com/all-about-backup-diagram-fefb25aaf804/"
+/>
+
+Một thứ quan trọng mà ta cần biết nữa chính là **Backup Diagram**, ta có thể xem nó như là visualization của phương trình Bellman. Dựa vào phương trình Bellman, ta có thể diễn giải Backup Diagram như là một cây mà mỗi lá chính là state kế tiếp (nhìn về tương lai kế tiếp) và các node không phải lá chính là trung bình của trọng số của các node dưới nó.
+- **Gốc** (vòng tròn rỗng, đại diện cho state): state $s$.
+- **Nhánh đầu tiên**: Policy $\pi(a \mid s)$.
+- **Nút đầu tiên** (vòng tròn không rỗng, đại diện cho cặp state-action): Cặp state-action $(s, a)$.
+- **Nhánh thứ hai**: Dynamics $p(s', r \mid s, a)$ của environment.
+- **Lá**: State kế tiếp $s'$ (leaves), trong đó value $v_{\pi}(s')$ đã được tính trước đó (theo phương trình Bellman, để tính value state $s$ hiện tại ta cần tính value của state kế tiếp).
+
+<Callout variant="remark" title="Backup Operation">
+Chúng ta gọi đây là **Backup** (sao lưu ngược). Không giống như đi tới (simulation), backup là việc chuyển thông tin từ tương lai ($s'$) về hiện tại ($s$). Toàn bộ các thuật toán RL (Dynamic Programming, TD Learning, Monte Carlo) đều xoay quanh việc xấp xỉ phương trình Bellman này.
+</Callout>
+
+## 5. Phương trình Bellman tối ưu
+
+Ta đã định nghĩa value function cho một policy $\pi$ cụ thể. Nhưng ta không chỉ muốn đánh giá một policy, ta muốn tìm ra policy **tốt nhất** (hay gọi cách khác là **policy tối ưu** - **Optimal Policy**).
+
+<Callout variant="definition" title="Optimal Policy">
+Một policy $\pi$ được xem là **tốt hơn hoặc bằng** policy $\pi'$ nếu kỳ vọng return (hay nói cách khác, là value) của nó lớn hơn hoặc bằng của $\pi'$ với mọi state $s \in \mathcal{S}$. Nói cách khác:
+$$
+\pi \geq \pi' \iff v_\pi(s) \geq v_{\pi'}(s), \ \forall s \in \mathcal{S}
+$$
+
+Luôn tồn tại ít nhất một policy mà tốt hơn tất cả. Ta gọi đây là **optimal policy**. Ta kí hiệu các optimal policy là $\pi_{\ast}$.
+$$
+\pi^{\ast} = \arg \max_{\pi} v_{\pi}(s), \ \forall s \in \mathcal{S}
+$$
+</Callout>
+
+Các optimal policy đều có cùng state-value function được gọi là **optimal state-value function**:
+$$
+v_{\ast}(s) = \max_{\pi} v_{\pi}(s), \ \forall s \in \mathcal{S}
+$$
+
+Tương tự $v_{\ast}$, các optimal policy đều có cùng action-value function, được gọi là **optimal action-value function**:
+$$
+q_{\ast}(s, a) = \max_{\pi} q_{\pi}(s, a), \ \forall s \in \mathcal{S}, \forall a \in \mathcal{A}(s)
+$$
+
+Tương tự như value function cho một policy $\pi$ cụ thể thì value function cho optimal policy $\pi^{\ast}$ cũng có thể được viết dưới dạng phương trình Bellman và ta gọi phương trình ấy là **phương trình Bellman tối ưu** (Bellman optimality function).
+
+Mối quan hệ giữa optimal action-value và optimal state-value được miêu tả như dưới đây:
+$$
+v_{\ast}(s) = \max_{a \in \mathcal{A}(s)} q_{\ast}(a, s)
+$$
+
+**Phương trình Bellman tối ưu cho state-value function**:
+$$
+\begin{aligned}
+v_{\ast}(s) &= \max_{a \in \mathcal{A}(s)} q_{\ast}(a, s) \\
+&= \max_{a \in \mathcal{A}(s)} \mathbb{E}[R_{t+1} + \gamma v_{\ast}(S_{t+1}) \mid S_{t} = s, A_{t} = a] \\
+&= \max_{a \in \mathcal{A}(s)} \sum_{s', r} p(s', r \mid s, a) [r + \gamma v_{\ast}(s')]
+\end{aligned}
+$$
+
+**Phương trình Bellman tối ưu cho action-value function**:
+$$
+\begin{aligned}
+q_{\ast}(a, s) &= \mathbb{E}[R_{t+1} + \gamma v_{\ast}(S_{t+1}) \mid S_{t} = s, A_{t} = a] \\
+&= \mathbb{E}[R_{t+1} + \gamma \max_{A_{t+1} \in \mathcal{A}(S_{t+1})} q(S_{t+1}, A_{t+1}) \mid S_{t} = s, A_{t} = a] \\
+&= \sum_{s', r} p(s', r \mid s, a) [r + \gamma \max_{a' \in \mathcal{A}(s')} q(s', a')]
+\end{aligned}
+$$
+
+<MdxImage
+src={backupIm2}
+alt="Backup Diagram 2"
+caption="Backup Diagram cho phương trình Bellman tối ưu của state-value function và action-value function. Trong đó đường cong giữa hai nhánh biểu thị cho max thay vì lấy trung bình như ban đầu."
+/>
+
+<Callout variant="warning" title="Tại sao phương trình Bellman tối ưu khó giải?">
+Phương trình Bellman thường là **Hệ phương trình tuyến tính** (Linear System) như ta đã chứng minh ở [phụ lục D](/note/sutton-barto-3#d-tính-tuyến-tính-của-phương-trình-bellman). Ta có thể giải bằng ma trận.
+
+Tuy nhiên, phương trình Bellman Tối ưu có chứa toán tử $\max$ (lấy giá trị lớn nhất giữa các hành động). Điều này khiến hệ phương trình trở thành Phi tuyến (Non-linear). Không có nghiệm đại số đóng (closed-form solution) để giải nó trực tiếp như nghịch đảo ma trận. Chúng ta buộc phải dùng các phương pháp lặp (Iterative methods) như Value Iteration, Policy Iteration hoặc Q-Learning để tiệm cận giá trị tối ưu này.
+</Callout>
+
+<Callout variant="remark">
+Nhớ đọc thêm [phụ lục E](/note/sutton-barto-3#e-làm-sao-để-tìm-được-optimal-policy).
+</Callout>
+
+## 6. Tham khảo
+
+<MdxBib source="rl-sutton/3.bib"/>
+
+## Phụ lục
+
+### A. Chứng minh phương trình Bellman của Value-State function
+
+Ta có:
+$$
+\begin{aligned}
+v_{\pi}(s) &= \mathbb{E}[G_{t} \mid S_{t} = s] \\
+&= \mathbb{E}[R_{t+1} + \gamma G_{t+1} \mid S_{t} = s] \\
+&= \mathbb{E}[R_{t+1} \mid S_{t} = s] + \gamma\mathbb{E}[G_{t+1} \mid S_{t} = s]
+\end{aligned}
+$$
+
+Có 2 kì vọng mà ta cần giải quyết chính là kì vọng của reward kế tiếp $G_{t+1}$ và kì vọng của return ở bước thời gian kế tiếp.
+
+**Kì vọng của reward kế tiếp**:
+
+Ta có:
+$$
+\mathbb{E}[R_{t+1} \mid S_t = s] = \sum_{r} r p(r \mid s)
+$$
+
+Ta cần "phân tách" được xác suất $p(r \mid s)$ thành 2 phần là policy $\pi(a \mid s)$ và dynamics $p(r, s' \mid s, a)$. Đầu tiên, áp dụng sum rule và product rule (có thể tìm hiểu thêm [ở đây](/note/prml-12)), ta có:
+$$
+\begin{aligned}
+p(r \mid s) &= \sum_{a \in \mathcal{A}(s)} p(r, a \mid s) \\
+&= \sum_{a \in \mathcal{A}(s)} p(r \mid a, s)p(a \mid s) \\
+&= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \left[ \sum_{s'} p(r, s' \mid a, s) \right]
+\end{aligned}
+$$
+
+Tiếp theo, áp dụng phân tích phía trên vào kì vọng, ta có:
+$$
+\begin{aligned}
+\mathbb{E}[R_{t+1} \mid S_t = s] &= \sum_{r} r p(r \mid s) \\
+&= \sum_{r} r \left[ \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \left\{  \sum_{s'} p(r, s' \mid a, s)  \right\} \right]
+\end{aligned}
+$$
+
+Có thể policy $\pi(a \mid s)$ không phụ thuộc vào tổng $r$ do đó ta có thể "swap" hai tổng $r$ và tổng $a$ với nhau, cuối cùng, ta có:
+$$
+\mathbb{E}[R_{t+1} \mid S_{t} = s] = \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \left[ \sum_{s' \in S, r \in \mathcal{R}} p(r, s' \mid a, s) r \right]
+$$
+
+**Kì vọng của return ở bước thời gian kế tiếp**:
+
+<Callout variant="recall">
+$$
+\mathbb{E}[X] = \sum_{y}\mathbb{E}[X \mid Y = y] \text{Pr} \{ Y = y \}
+$$
+</Callout>
+
+Áp dụng tính chất ở trên, ta được:
+$$
+\begin{aligned}
+\mathbb{E}[G_{t+1} \mid S_{t} = s] &= \sum_{a \in \mathcal{A}(s)} \mathbb{E}[G_{t+1} \mid S_{t} = s, A_{t} = a] \text{Pr} \{A_{t} = a \mid S_{t} = s \}  \\
+&= \sum_{a \in \mathcal{A}(s)} \mathbb{E}[G_{t+1} \mid S_{t} = s, A_{t} = a]\pi(a \mid s)
+\end{aligned}
+$$
+
+Tiếp tục áp dụng tính chất của kì vọng có điều kiện, ta có:
+$$
+\mathbb{E}[G_{t+1} \mid S_{t} = s, A_{t} = a] = \sum_{r, s'} p(r, s' \mid s, a) \mathbb{E}[G_{t+1} \mid S_{t+1} = s', S_{t} = s, R_{t+1} = r, A_{t}= a]
+$$
+
+<Callout variant="definition" title="Độc lập có điều kiện">
+Nếu $P(A \mid B, C) = P(A \mid C)$ thì trong trường hợp này, ta nói, $A$ và $B$ là độc lập *có điều kiện* biết $C$ (hay điều kiện $C$).
+</Callout>
+
+Ta có thể thấy, với tính chất Markov của MDP, ta có thể nói $G_{t+1}$ và $S_t = s$ là độc lập có điều biết $S_{t+1} = s'$ (tương tự với $A_t = a$ và $R_{t+1} = r$). Do đó:
+$$
+\begin{aligned}
+\mathbb{E}[G_{t+1} \mid S_{t} =s, A_{t} = a] &= \sum_{s', r} p(r, s' \mid s, a) \mathbb{E}[G_{t+1} \mid S_{t+1} = s'] \\
+&= \sum_{s', r}p(r, s' \mid s, a) v_{\pi}(s')
+\end{aligned}
+$$
+
+Cuối cùng, ta được:
+$$
+v_{\pi}(s) = \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \left[ \sum_{s', r} p(s', r \mid s, a) \{ \gamma v_{\pi}(s') + r \} \right]
+$$
+
+### B. Chứng minh phương trình Bellman của Action-Value function
+
+Từ chứng minh ở phụ lục A, ta thấy:
+$$
+\mathbb{E}[v_{\pi}(S_{t+1}) \mid S_{t} = s, A_{t} = a] = \sum_{s',r} p(s', r \mid s, a) v_{\pi}(s') = \mathbb{E}[G_{t+1} \mid S_{t} = s, A_{t} = a]
+$$
+
+Ngoài ra:
+$$
+\begin{aligned}
+\sum_{s', r} p(s', r \mid s, a) \{ \gamma v_{\pi}(s') + r \} &= \mathbb{E}[\gamma v_{\pi}(S_{t+1}) + R_{t+1} \mid S_{t} = s, A_{t} = a] \\
+&= \mathbb{E}[R_{t+1} \mid S_{t} = s, A_{t} = a] + \gamma \mathbb{E}[v_{\pi}(S_{t+1}) \mid S_{t} = s, A_{t} = a] \\
+&= \mathbb{E}[R_{t+1} \mid S_{t} = s, A_{t} = a] + \gamma \mathbb{E}[G_{t+1} \mid S_{t} = s, A_{t} = a] \\
+&= q_{\pi}(s, a)
+\end{aligned}
+$$
+
+Giờ để thoả mãn tính đệ quy của phương trình Bellman, ta cần đưa phương trình $q_{\pi}$ thành phương trình của một $q_{\pi}$ khác. Đầu tiên:
+$$
+\begin{aligned}
+v_{\pi}(s) &= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \left[ \sum_{s', r} p(s', r \mid s, a) \{ \gamma v_{\pi}(s') + r \} \right] \\
+&= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s)q_{\pi}(s, a) \\
+\Leftrightarrow v_{\pi}(s') &= \sum_{a' \in \mathcal{A}(s')} \pi(a' \mid s') q_{\pi}(s', a')
+\end{aligned}
+$$
+
+Sau đó thế phương trình trên vào $q_{\pi}(s, a)$, ta được kết quả cuối cùng:
+$$
+q_{\pi}(s, a) = \sum_{s', r}p(s', r \mid s, a)\left[ r +  \gamma  \sum_{a' \in \mathcal{A}(s')} \pi(a' \mid s')q_{\pi}(s', a') \right]
+$$
+
+<Callout variant="note">
+Để ý rằng ta có thể viết state-value function $v_{\pi}(s)$ dưới thành tổng của action-value function $q_{\pi}(s, a)$:
+$$
+\begin{aligned}
+v_{\pi}(s) &= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) q_{\pi}(s, a) \\
+&= \mathbb{E}[q_{\pi}(S_t, A_t) \mid S_t = s]
+\end{aligned}
+$$
+</Callout>
+
+### C. Kết hợp Episodic và Continuing vào một công thức
+Đặt tập hợp các *non-terminal state* (các state mà không phải terminal state) là $\mathcal{S}$ và tập hợp tất cả state (bao gồm cả terminal state) là $\mathcal{S}^+$.
+
+<Callout variant="note">
+Để dynamics $p(r, s' \mid s, a)$ giữ nguyên ở cả 2 trường hợp, ta cần định nghĩa xác suất mà agent có thể *thoát khỏi* terminal state (nói cách khác là chuyển sang state khác khi đang ở terminal state).
+</Callout>
+
+Nhìn kĩ hơn, terminal state là state mà agent **không thể** thoát khỏi do đó dynamics $p(s', r \mid S_{T}, a)$ sẽ là $0$ cho mọi $s' \neq S_T$ và chỉ bằng 1 nếu $s' = S_T$. Nói cách khác:
+$$
+p(s', r \mid S_{t}, a) = \begin{cases}
+1 \ \text{if $s' = S_{t}$ and $r = 0$} \\
+0 \ \text{otherwise}
+\end{cases}
+$$
+
+Trong đó:
+- $s' = S_T$: Nếu ta đang ở terminal state, thì có thể xem như agent bị *kẹt* mãi mãi tại state này, ta còn gọi đây là **absorbing state**.
+- $r = 0$: reward cho terminal state là $0$.
+
+Do đó, dynamics vẫn giữ nguyên nên ta có:
+$$
+\sum_{s' \in \mathcal{S}^{+}} \sum_{r \in \mathcal{R}} p(s', r \mid s, a) = 1, \quad \forall\text{$a \in \mathcal{A}(s)$, $\forall s \in \mathcal{S}^{+}$}
+$$
+
+Vì vậy chỉ cần định nghĩa dynamics cho terminal state và chuyển sang $\mathcal{S}^+$, ta đã kết hợp cả 2 trường hợp continuing và episodic vào thành một.
+
+### D. Tính tuyến tính của phương trình Bellman
+
+Với mỗi state $s$, ta sẽ có một value $v_{\pi}(s)$, do đó giả sử ta có $n$ state thì ta có thể viết thành $n$ phương trình và việc giải value $v_{\pi}$ trở thành việc giải hệ phương trình:
+
+$$
+\begin{cases}
+v_{\pi}(s_{1}) &= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{s_{1}', r} p(s_{1}', r \mid s_{1}, a)[r + \gamma v_{\pi}(s_{1}')] \\
+v_{\pi}(s_{2}) &= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{s_{2}', r} p(s_{2}', r \mid s_{2}, a)[r + \gamma v_{\pi}(s_{2}')] \\
+&\dots \\
+v_{\pi}(s_{n}) &= \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{s_{n}', r} p(s_{n}', r \mid s_{n}, a)[r + \gamma v_{\pi}(s_{n}')] \\
+\end{cases}
+$$
+
+Và điều tuyệt vời hơn là ta có thể viết hệ phương trình ấy thành một dạng ma trận và cho thấy phương trình Bellman của một policy cụ thể là **tuyến tính**. Đầu tiên, đặt:
+- **State-transition matrix** $P^{\pi}(s' \mid s)$: Nếu agent đang ở state $s$, xác suất mà agent ở state $s'$, biết rằng được lấy trung bình dựa trên mỗi action của policy $\pi$, là bao nhiêu ?
+$$
+P^{\pi}(s' \mid s) = \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{r} p(s', r \mid s, a)
+$$
+- **Expected reward vector** $R^{\pi}(s)$: Nếu agent đang ở state $s$, thì kì vọng reward là bao nhiêu, biết rằng được lấy trung bình dựa trên mỗi của policy $\pi$.
+$$
+R^{\pi}(s) = \sum_{a \in \mathcal{A}(s)} \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a)r
+$$
+
+Vậy, phương trình Bellman trở thành:
+$$
+v_{\pi}(s) = R^{\pi}(s) + \gamma \sum_{s' \in \mathcal{S}} P^{\pi}(s' \mid s) v_{\pi}(s')
+$$
+
+Viết lại hệ phương trình, ta có:
+$$
+\underbrace{\begin{bmatrix}
+v_\pi(s_1) \\
+v_\pi(s_2) \\
+\vdots \\
+v_\pi(s_n)
+\end{bmatrix}}_{\mathbf{v}_\pi}
+=
+\underbrace{\begin{bmatrix}
+R^\pi(s_1) \\
+R^\pi(s_2) \\
+\vdots \\
+R^\pi(s_n)
+\end{bmatrix}}_{\mathbf{r}_{\pi}}
++ \gamma
+\underbrace{\begin{bmatrix}
+P^\pi(s_1|s_1) & P^\pi(s_2|s_1) & \dots & P^\pi(s_n|s_1) \\
+P^\pi(s_1|s_2) & P^\pi(s_2|s_2) & \dots & P^\pi(s_n|s_2) \\
+\vdots & \vdots & \ddots & \vdots \\
+P^\pi(s_1|s_n) & P^\pi(s_2|s_n) & \dots & P^\pi(s_n|s_n)
+\end{bmatrix}}_{\mathbf{P}_\pi}
+\underbrace{\begin{bmatrix}
+v_\pi(s_1) \\
+v_\pi(s_2) \\
+\vdots \\
+v_\pi(s_n)
+\end{bmatrix}}_{\mathbf{v}_\pi}
+$$
+
+Cuối cùng, ta có dạng ma trận là:
+$$
+\mathbf{v}_\pi = \mathbf{r}_\pi + \gamma \mathbf{P}_\pi \mathbf{v}_\pi
+$$
+
+Vì vậy, ta có thể tìm được value của một policy $\pi$ bất kỳ bằng cách giải ma trận trên:
+$$
+\mathbf{v}_{\pi} = (\mathbf{I} - \gamma \mathbf{P}_{\pi})^{-1} \mathbf{r}_{\pi}
+$$
+
+<Callout variant="note">
+Có thể thấy ta hoàn toàn có thể tính được giá trị chính xác của $v_{\pi}$ nhưng trong thực tế thì lại không, bởi vì:
+- Đầu tiên, để nghịch đảo một ma trận ta thường phân tách LU hoặc khử Gauss, các thuật toán này đều có độ phức tạp là $\mathcal{O}(n^3)$ với $n$ là số lượng state. Nếu số lượng state nhỏ thì có thể làm được nhưng giả sử với cờ vua khi số lượng state lên đến $n=10^{50}$ thì việc nghịch đảo là bất khả thi.
+- Điều thứ hai đó chính là ta không thể biết được dynamics $p(s', r \mid s, a)$ của environment (hay nói cách khác là quy luật của thế giới mà agent đang ở). Do đó ta gần như không thể tính được $\mathbf{P}^{\pi}$ hay $\mathbf{r}^{\pi}$.
+
+Ngoài ra việc biết được dynamics của environment thì vẫn gần như bất khả thi để giải ma trận trên. Ví dụ game Go có số lượng state lớn hơn số lượng nguyên tử trong toàn bộ vũ trụ ($10^{80^3}$).
+</Callout>
+
+### E. Làm sao để tìm được optimal policy
+
+Ta có công thức sau:
+$$
+\begin{aligned}
+\pi^{\ast} &= \arg \max_{\pi} v_{\pi}(s), \\
+v^{\ast}(s) &= \max_{\pi} v_{\pi}(s), \\
+v^{\ast}(s) &= \max_{a \in \mathcal{A}(s)} \sum_{s', r} p(s', r \mid s, a) [r + \gamma v_{\ast}(s')] \\
+\implies \pi^{\ast} &= \arg \max_{a \in \mathcal{A}(s)} \sum_{s', r} p(s', r \mid s, a) [r + \gamma v_{\ast}(s')] \\
+&= \arg \max_{a \in \mathcal{A}(s)} q_{\ast}(s, a)
+\end{aligned}
+$$
+
+Có 2 cách để chọn được optimal policy, dựa vào $v_{\ast}$ (công thức gần cuối) và $q_{\ast}$ công thức cuối cùng.
+
+**Dựa vào optimal state-value function**:
+- Đầu tiên, để tìm được optimal policy $\pi^{\ast}$ biết trước $v_{\ast}$ ta phải biết được dynamics của environment $p(s', r \mid s,a)$ ngoài ra ta phải thực hiện *one-step (look-ahead) search* (nhìn về tương lai kế tiếp), hay nói cách khác, tính tổng dựa trên toàn bộ state $s'$ và reward $r$.
+- Ngoài ra, việc chọn này là *greedy* bởi vì ta chỉ cần nhìn vào reward kế tiếp $r$ và value của state kế tiếp $v_{\ast}(s')$ thế nhưng việc này vẫn cho ra kết quả optimal ở tương lai xa. Điều này có được là bởi vì $v_{\ast}(s')$ chịu trách nhiệm cho việc chọn chuỗi reward tối ưu nhất ở tương lai kế tiếp.
+
+**Dựa vào optimal action-value function**: Ở trường hợp này thì mọi chuyện sẽ dễ thở hơn, agent không cần thực hiện one-step search mà chỉ cần chọn action nào có $q_{\ast}(s, a)$ cao nhất là được. Và hơn nữa, cách này không phụ thuộc vào dynamics của environment, thứ mà ta không bao giờ biết được.
